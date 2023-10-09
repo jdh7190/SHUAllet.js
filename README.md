@@ -4,7 +4,7 @@
 
 SHUAllet.js is a simple browser wallet plug-in that supports common Bitcoin transaction functions.
 
-The wallet has two private keys, one for payments (localStorage.walletKey), one for ownership of NFTs (localStorage.ownerKey) (1 Sat Ordinals).
+The wallet has two private keys, one for payments (localStorage.walletKey), one for ownership of NFTs (localStorage.ownerKey).
 
 ## Setup
 
