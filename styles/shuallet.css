@@ -1,0 +1,36 @@
+.shuallet {
+    margin-top: 20px;
+    border-radius: 5px;
+    position: relative;
+    width: 140px;
+    height: 40px;
+    color: white;
+    background-color: #7700EE;
+}
+.btn:hover {
+    opacity: 0.7;
+}
+.backup-wallet {
+    display: none;
+}
+.wallet-balance {
+    margin: 10px;
+}
+.wallet-address {
+    font-size: 20px;
+    margin-top: 10px;
+}
+.logout {
+    color: black;
+    margin-top: 20px;
+    height: 40px;
+    width: 140px;
+    border-radius: 5px;
+}
+.shuapng {
+    position: absolute;
+    height: 24px;
+    width: 24px;
+    top: 8px;
+    left: 6px;
+}

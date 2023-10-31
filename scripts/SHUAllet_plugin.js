@@ -479,7 +479,6 @@ const getWalletBalance = async address => {
     const balance = utxos.reduce(((t, e) => t + e.value), 0)
     return balance; 
 }
-const form = document.getElementById('upload');
 const fileUpload = document.getElementById('uploadFile');
 if (fileUpload) {
     fileUpload.addEventListener('change', e => {

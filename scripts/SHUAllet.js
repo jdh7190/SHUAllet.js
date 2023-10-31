@@ -43,7 +43,6 @@ const getWalletBalance = async address => {
     const balance = utxos.reduce(((t, e) => t + e.value), 0)
     return balance; 
 }
-const form = document.getElementById('upload');
 const fileUpload = document.getElementById('uploadFile');
 if (fileUpload) {
     fileUpload.addEventListener('change', e => {
@@ -63,13 +62,21 @@ if (fileUpload) {
         reader.readAsText(file);
     })
 }
+const initWallet = async() => {
+    if (localStorage.walletAddress && document.getElementById('walletAddress')) {
+        document.getElementById('walletAddress').innerText = localStorage?.walletAddress || '';
+        document.getElementsByClassName('backup-wallet')[0].style.display = 'block';
+        const balance = await getWalletBalance(localStorage.walletAddress);
+        document.getElementById('walletBalance').innerText = `${balance / 100000000} BSV`;
+    }
+}
 const setupWallet = async() => {
     if (!localStorage.walletKey) {
         const create = confirm(`Do you want to import an existing wallet?`);
         if (!create) {
             const paymentPk = newPK();
             const ownerPK = newPK();
-            restoreWallet(ownerPK, paymentPk);
+            restoreWallet(ownerPK, paymentPk, true);
             alert(`Wallet created, click OK to download backup json file.`);
             backupWallet();
         } else { fileUpload.click() }
@@ -84,18 +91,19 @@ const backupWallet = () => {
 }
 const sendBSV = async() => {
     try {
-        const amt = parseInt(prompt(`Enter satoshi amount to send:`));
-        if (!amt) { throw `Invalid amount` }
-        console.log(amt)
+        const amt = prompt(`Enter satoshi amount to send:`);
+        if (amt === null) return;
+        const satoshis = parseInt(amt);
+        if (!satoshis) { throw `Invalid amount` }
         const to = prompt(`Enter address to send BSV to:`);
         if (!to) { return }
         const addr = bsv.Address.fromString(to);
         if (addr) {
             const bsvtx = bsv.Transaction();
-            bsvtx.to(addr, amt);
+            bsvtx.to(addr, satoshis);
             const rawtx = await payForRawTx(bsvtx.toString());
             if (rawtx) {
-                const c = confirm(`Send ${amt} satoshis to ${addr}?`);
+                const c = confirm(`Send ${satoshis} satoshis to ${addr}?`);
                 if (c) {
                     const t = await broadcast(rawtx);
                     alert(t);
@@ -112,7 +120,7 @@ const newPK = () => {
     const pkWIF = pk.toWIF();
     return pkWIF;
 }
-const restoreWallet = (oPK, pPk) => {
+const restoreWallet = (oPK, pPk, newWallet) => {
     const pk = bsv.PrivateKey.fromWIF(pPk);
     const pkWif = pk.toString();
     const address = bsv.Address.fromPrivateKey(pk)
@@ -123,6 +131,8 @@ const restoreWallet = (oPK, pPk) => {
     localStorage.walletAddress = address.toString();
     localStorage.walletKey = pkWif;
     localStorage.ownerPublicKey = ownerPk.toPublicKey().toHex();
+    newWallet ? alert(`Wallet ${address} created!`) : alert(`Wallet ${address} restored!`);
+    if (!newWallet) location.reload();
 }
 const payForRawTx = async rawtx => {
     const bsvtx = bsv.Transaction(rawtx);
@@ -136,3 +146,14 @@ const payForRawTx = async rawtx => {
     bsvtx.sign(bsv.PrivateKey.fromWIF(localStorage.walletKey));
     return bsvtx.toString();
 }
+const logout = () => {
+    if (localStorage.walletKey) {
+        const conf = confirm(`Are you sure you want to logout?
+
+If so, please ensure your wallet is backed up first!`);
+        if (!conf) return;
+        localStorage.clear();
+        location.reload();
+    }
+}
+initWallet();

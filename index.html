@@ -1,5 +1,6 @@
 <html>
     <head>
+        <link href="styles/shuallet.css" rel="stylesheet" type="text/css">
         <script src="./scripts/bsv.browser.min.js"></script>
         <script src="./scripts/message.js"></script>
         <script src="./scripts/api.js"></script>
@@ -10,10 +11,23 @@
         <script src="./scripts/bHelpers.js"></script>
         <script src="./scripts/helpers.js"></script>
         <script src="./scripts/bsv-lock.js"></script>
-        <script src="./scripts/SHUAllet.js"></script>
-        <script src="./scripts/oneSatOrdinals.js"></script>
     </head>
 </html>
-<script>
-    
-</script>
+<body>SHUAllet.js Demo
+    <div class="btns center" id="shlogin">
+        <button class="btn shuallet" onclick="setupWallet()">
+            <img src="./assets/shuacoin.png" class="shuapng">
+            <span class="btn-text">SHUAllet</span>
+        </button>
+        <div id="walletAddress" class="wallet-address"></div>
+        <div id="walletBalance" class="wallet-balance"></div>
+        <div class="backup-wallet">
+            <button onclick="backupWallet()">Backup Wallet</button>
+            <button onclick="sendBSV()">Send</button>
+            <button onclick="logout()">Logout</button>
+        </div>
+    </div>
+    <input type="file" id="uploadFile" accept=".json" hidden>
+</body>
+<script src="./scripts/SHUAllet.js"></script>
+<script src="./scripts/oneSatOrdinals.js"></script>
