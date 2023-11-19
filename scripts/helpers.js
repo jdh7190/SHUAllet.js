@@ -9,3 +9,4 @@ const getScriptPushData = data => {
     const abuf = base64ToArrayBuffer(b64);
     return dataToBuf(abuf);
 }
+const sleep = timeout => { return new Promise(resolve => setTimeout(resolve, timeout)) }

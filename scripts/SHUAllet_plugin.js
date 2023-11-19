@@ -34,6 +34,7 @@ const broadcast = async txhex => {
     })).json();
     return r;
 }
+const sleep = timeout => { return new Promise(resolve => setTimeout(resolve, timeout)) }
 class BSocial {
     constructor(appName) {
       if (!appName) throw new Error('App name needs to be set');
@@ -320,6 +321,7 @@ const dataToBuf = arr => {
     return bufferWriter.toBuffer();
 }
 const getUTXO = (rawtx, idx) => {
+    idx = parseInt(idx);
     const bsvtx = new bsv.Transaction(rawtx);
     return {
         satoshis: bsvtx.outputs[idx].satoshis,
@@ -519,18 +521,19 @@ const backupWallet = () => {
 }
 const sendBSV = async() => {
     try {
-        const amt = parseInt(prompt(`Enter satoshi amount to send:`));
-        if (!amt) { throw `Invalid amount` }
-        console.log(amt)
+        const amt = prompt(`Enter satoshi amount to send:`);
+        if (amt === null) return;
+        const satoshis = parseInt(amt);
+        if (!satoshis) { throw `Invalid amount` }
         const to = prompt(`Enter address to send BSV to:`);
         if (!to) { return }
         const addr = bsv.Address.fromString(to);
         if (addr) {
             const bsvtx = bsv.Transaction();
-            bsvtx.to(addr, amt);
+            bsvtx.to(addr, satoshis);
             const rawtx = await payForRawTx(bsvtx.toString());
             if (rawtx) {
-                const c = confirm(`Send ${amt} satoshis to ${addr}?`);
+                const c = confirm(`Send ${satoshis} satoshis to ${addr}?`);
                 if (c) {
                     const t = await broadcast(rawtx);
                     alert(t);

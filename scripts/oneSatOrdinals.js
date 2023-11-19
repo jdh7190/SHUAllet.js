@@ -140,3 +140,25 @@ const buyListing = async(listingTxid, listingIdx, payPkWIF, toAddress, changeAdd
     });
     return bsvtx.toString();
 }
+const indexerSubmit = async txid => {
+    try {
+        const rp = await fetch(`https://v3.ordinals.gorillapool.io/api/tx/${txid}/submit`, {method: 'post'});
+        console.log(`Submitted ${txid} to indexer.`);
+        return rp;
+    } catch(e) {
+        console.log(e);
+        return {error:e};
+    }
+}
+const bsv20Mint = async(tick, amt, address) => {
+    const payload = {
+        "p": "bsv-20",
+        "op": "mint",
+        "tick": tick,
+        "amt": amt.toString()
+    }
+    const rawtx = await inscribeTx(JSON.stringify(payload), 'application/bsv-20', null, address);
+    const t = await broadcast(rawtx);
+    await indexerSubmit(t);
+    await sleep(5000);
+}
