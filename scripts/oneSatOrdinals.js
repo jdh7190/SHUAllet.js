@@ -160,5 +160,5 @@ const bsv20Mint = async(tick, amt, address) => {
     const rawtx = await inscribeTx(JSON.stringify(payload), 'application/bsv-20', null, address);
     const t = await broadcast(rawtx);
     await indexerSubmit(t);
-    await sleep(5000);
+    return t;
 }
