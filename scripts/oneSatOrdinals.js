@@ -33,12 +33,19 @@ const signInput = (bsvtx, utxo, pkWIF, idx, cancelListing = false) => {
     bsvtx.inputs[idx].setScript(unlockingScript);
     return bsvtx;
 }
-const inscribeTx = async(data, mediaType, metaDataTemplate, toAddress) => {
-    const bsvtx = bsv.Transaction();
+const inscribeTx = async(data, mediaType, metaDataTemplate, toAddress, templateRawTx, pay = false) => {
+    let bsvtx;
+    if (templateRawTx) {
+        bsvtx = bsv.Transaction(templateRawTx);
+    } else {
+        bsvtx = bsv.Transaction();
+    }
     const inscriptionScript = buildInscription(toAddress, data, mediaType, metaDataTemplate);
     bsvtx.addOutput(bsv.Transaction.Output({ script: inscriptionScript, satoshis: 1 }));
-    const paidRawTx = await payForRawTx(bsvtx.toString());
-    return paidRawTx;
+    if (pay) {
+        const paidRawTx = await payForRawTx(bsvtx.toString());
+        return paidRawTx;
+    } else { return bsvtx.toString() }
 }
 const sendInscription = async(txid, idx, ordPkWIF, payPkWIF, toAddress) => {
     let bsvtx = bsv.Transaction();
@@ -149,16 +156,4 @@ const indexerSubmit = async txid => {
         console.log(e);
         return {error:e};
     }
-}
-const bsv20Mint = async(tick, amt, address) => {
-    const payload = {
-        "p": "bsv-20",
-        "op": "mint",
-        "tick": tick,
-        "amt": amt.toString()
-    }
-    const rawtx = await inscribeTx(JSON.stringify(payload), 'application/bsv-20', null, address);
-    const t = await broadcast(rawtx);
-    await indexerSubmit(t);
-    return t;
 }

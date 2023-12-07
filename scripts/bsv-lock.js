@@ -22,8 +22,9 @@ const hex2Int = hex => {
     const reversedHex = changeEndianness(hex);
     return parseInt(reversedHex, 16);
 }
-const createLockOutput = (address, blockHeight, satoshis) => {
-    const bsvtx = bsv.Transaction();
+const createLockOutput = (address, blockHeight, satoshis, templateRawTx) => {
+    let bsvtx;
+    if (templateRawTx) { bsvtx = bsv.Transaction(templateRawTx) } else { bsvtx = bsv.Transaction() }
     const p2pkhOut = new bsv.Transaction.Output({script: bsv.Script(new bsv.Address(address)), satoshis: 1});
     const addressHex = p2pkhOut.script.chunks[2].buf.toString('hex');
     const nLockTimeHexHeight = int2Hex(blockHeight);

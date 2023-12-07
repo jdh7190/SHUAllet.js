@@ -382,8 +382,9 @@ const hex2Int = hex => {
     const reversedHex = changeEndianness(hex);
     return parseInt(reversedHex, 16);
 }
-const createLockOutput = (address, blockHeight, satoshis) => {
-    const bsvtx = bsv.Transaction();
+const createLockOutput = (address, blockHeight, satoshis, templateRawTx) => {
+    let bsvtx;
+    if (templateRawTx) { bsvtx = bsv.Transaction(templateRawTx) } else { bsvtx = bsv.Transaction() }
     const p2pkhOut = new bsv.Transaction.Output({script: bsv.Script(new bsv.Address(address)), satoshis: 1});
     const addressHex = p2pkhOut.script.chunks[2].buf.toString('hex');
     const nLockTimeHexHeight = int2Hex(blockHeight);
@@ -436,10 +437,24 @@ const unlockCoins = async(pkWIF, receiveAddress, txid, oIdx = 0) => {
         return bsvtx.toString();
     } catch(e) { console.log(e) }
 }
+const normalizeUTXOs = utxos => {
+    return utxos.map(utxo => {
+        return {
+            satoshis: utxo?.value || utxo?.satoshis,
+            txid: utxo?.txid || utxo.tx_hash,
+            vout: utxo.vout === undefined ? utxo.tx_pos : utxo.vout
+        }
+    })
+}
 const getUTXOs = async address => {
     const r = await fetch(`https://api.whatsonchain.com/v1/bsv/main/address/${address}/unspent`);
     const res = await r.json();
-    return res;
+    return normalizeUTXOs(res);
+}
+const btUTXOs = async address => {
+    const r = await fetch(`https://api.bitails.io/address/${address}/unspent`);
+    const { unspent } = await r.json();
+    return normalizeUTXOs(unspent);
 }
 const between = (x, min, max) => { return x >= min && x <= max }
 const getPaymentUTXOs = async(address, amount) => {
@@ -448,27 +463,27 @@ const getPaymentUTXOs = async(address, amount) => {
     const script = bsv.Script.fromAddress(addr);
     let cache = [], satoshis = 0;
     for (let utxo of utxos) {
-        if (utxo.value > 1) {
-            const foundUtxo = utxos.find(utxo => utxo.value >= amount + 2);
+        if (utxo.satoshis > 1) {
+            const foundUtxo = utxos.find(utxo => utxo.satoshis >= amount + 2);
             if (foundUtxo) {
-                return [{ satoshis: foundUtxo.value, vout: foundUtxo.tx_pos, txid: foundUtxo.tx_hash, script: script.toHex() }]
+                return [{ satoshis: foundUtxo.satoshis, vout: foundUtxo.vout, txid: foundUtxo.txid, script: script.toHex() }]
             }
             cache.push(utxo);
             if (amount) {
-                satoshis = cache.reduce((a, curr) => { return a + curr.value }, 0);
+                satoshis = cache.reduce((a, curr) => { return a + curr.satoshis }, 0);
                 if (satoshis >= amount) {
                     return cache.map(utxo => {
-                        return { satoshis: utxo.value, vout: utxo.tx_pos, txid: utxo.tx_hash, script: script.toHex() }
+                        return { satoshis: utxo.satoshis, vout: utxo.vout, txid: utxo.txid, script: script.toHex() }
                     });
                 }
                 else if (satoshis === amount || between(amount, satoshis - P2PKH_INPUT_SIZE, satoshis + P2PKH_INPUT_SIZE)) {
                     return cache.map(utxo => {
-                        return { satoshis: utxo.value, vout: utxo.tx_pos, txid: utxo.tx_hash, script: script.toHex() }
+                        return { satoshis: utxo.satoshis, vout: utxo.vout, txid: utxo.txid, script: script.toHex() }
                     })
                 }
             } else {
                 return utxos.map(utxo => {
-                    return { satoshis: utxo.value, vout: utxo.tx_pos, txid: utxo.tx_hash, script: script.toHex() }
+                    return { satoshis: utxo.satoshis, vout: utxo.vout, txid: utxo.txid, script: script.toHex() }
                 });
             }
         }
@@ -478,7 +493,7 @@ const getPaymentUTXOs = async(address, amount) => {
 const getWalletBalance = async address => {
     if (!address) address = localStorage.walletAddress;
     const utxos = await getUTXOs(address);
-    const balance = utxos.reduce(((t, e) => t + e.value), 0)
+    const balance = utxos.reduce(((t, e) => t + e.satoshis), 0)
     return balance; 
 }
 const fileUpload = document.getElementById('uploadFile');
@@ -609,12 +624,19 @@ const signInput = (bsvtx, utxo, pkWIF, idx, cancelListing = false) => {
     bsvtx.inputs[idx].setScript(unlockingScript);
     return bsvtx;
 }
-const inscribeTx = async(data, mediaType, metaDataTemplate, toAddress) => {
-    const bsvtx = bsv.Transaction();
+const inscribeTx = async(data, mediaType, metaDataTemplate, toAddress, templateRawTx, pay = false) => {
+    let bsvtx;
+    if (templateRawTx) {
+        bsvtx = bsv.Transaction(templateRawTx);
+    } else {
+        bsvtx = bsv.Transaction();
+    }
     const inscriptionScript = buildInscription(toAddress, data, mediaType, metaDataTemplate);
     bsvtx.addOutput(bsv.Transaction.Output({ script: inscriptionScript, satoshis: 1 }));
-    const paidRawTx = await payForRawTx(bsvtx.toString());
-    return paidRawTx;
+    if (pay) {
+        const paidRawTx = await payForRawTx(bsvtx.toString());
+        return paidRawTx;
+    } else { return bsvtx.toString() }
 }
 const sendInscription = async(txid, idx, ordPkWIF, payPkWIF, toAddress) => {
     let bsvtx = bsv.Transaction();
@@ -725,16 +747,4 @@ const indexerSubmit = async txid => {
         console.log(e);
         return {error:e};
     }
-}
-const bsv20Mint = async(tick, amt, address) => {
-    const payload = {
-        "p": "bsv-20",
-        "op": "mint",
-        "tick": tick,
-        "amt": amt.toString()
-    }
-    const rawtx = await inscribeTx(JSON.stringify(payload), 'application/bsv-20', null, address);
-    const t = await broadcast(rawtx);
-    await indexerSubmit(t);
-    return t;
 }

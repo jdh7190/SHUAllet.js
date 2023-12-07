@@ -1,7 +1,21 @@
+const normalizeUTXOs = utxos => {
+    return utxos.map(utxo => {
+        return {
+            satoshis: utxo?.value || utxo?.satoshis,
+            txid: utxo?.txid || utxo.tx_hash,
+            vout: utxo.vout === undefined ? utxo.tx_pos : utxo.vout
+        }
+    })
+}
 const getUTXOs = async address => {
     const r = await fetch(`https://api.whatsonchain.com/v1/bsv/main/address/${address}/unspent`);
     const res = await r.json();
-    return res;
+    return normalizeUTXOs(res);
+}
+const btUTXOs = async address => {
+    const r = await fetch(`https://api.bitails.io/address/${address}/unspent`);
+    const { unspent } = await r.json();
+    return normalizeUTXOs(unspent);
 }
 const between = (x, min, max) => { return x >= min && x <= max }
 const getPaymentUTXOs = async(address, amount) => {
@@ -10,27 +24,22 @@ const getPaymentUTXOs = async(address, amount) => {
     const script = bsv.Script.fromAddress(addr);
     let cache = [], satoshis = 0;
     for (let utxo of utxos) {
-        if (utxo.value > 1) {
-            const foundUtxo = utxos.find(utxo => utxo.value >= amount + 2);
+        if (utxo.satoshis > 1) {
+            const foundUtxo = utxos.find(utxo => utxo.satoshis >= amount + 2);
             if (foundUtxo) {
-                return [{ satoshis: foundUtxo.value, vout: foundUtxo.tx_pos, txid: foundUtxo.tx_hash, script: script.toHex() }]
+                return [{ satoshis: foundUtxo.satoshis, vout: foundUtxo.vout, txid: foundUtxo.txid, script: script.toHex() }]
             }
             cache.push(utxo);
             if (amount) {
-                satoshis = cache.reduce((a, curr) => { return a + curr.value }, 0);
+                satoshis = cache.reduce((a, curr) => { return a + curr.satoshis }, 0);
                 if (satoshis >= amount) {
                     return cache.map(utxo => {
-                        return { satoshis: utxo.value, vout: utxo.tx_pos, txid: utxo.tx_hash, script: script.toHex() }
+                        return { satoshis: utxo.satoshis, vout: utxo.vout, txid: utxo.txid, script: script.toHex() }
                     });
-                }
-                else if (satoshis === amount || between(amount, satoshis - P2PKH_INPUT_SIZE, satoshis + P2PKH_INPUT_SIZE)) {
-                    return cache.map(utxo => {
-                        return { satoshis: utxo.value, vout: utxo.tx_pos, txid: utxo.tx_hash, script: script.toHex() }
-                    })
                 }
             } else {
                 return utxos.map(utxo => {
-                    return { satoshis: utxo.value, vout: utxo.tx_pos, txid: utxo.tx_hash, script: script.toHex() }
+                    return { satoshis: utxo.satoshis, vout: utxo.vout, txid: utxo.txid, script: script.toHex() }
                 });
             }
         }
@@ -40,7 +49,7 @@ const getPaymentUTXOs = async(address, amount) => {
 const getWalletBalance = async address => {
     if (!address) address = localStorage.walletAddress;
     const utxos = await getUTXOs(address);
-    const balance = utxos.reduce(((t, e) => t + e.value), 0)
+    const balance = utxos.reduce(((t, e) => t + e.satoshis), 0)
     return balance; 
 }
 const fileUpload = document.getElementById('uploadFile');
