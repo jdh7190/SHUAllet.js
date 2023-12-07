@@ -17,6 +17,7 @@ const initSHUAlletDB = () => {
         }
     })
 }
+initSHUAlletDB();
 const addUTXO = utxo => {
     if (idb) {
         const request = indexedDB.open('shuallet');

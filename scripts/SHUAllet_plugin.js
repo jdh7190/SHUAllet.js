@@ -531,11 +531,6 @@ const getPaymentUTXOs = async(address, amount) => {
                         return { satoshis: utxo.satoshis, vout: utxo.vout, txid: utxo.txid, script: script.toHex() }
                     });
                 }
-                else if (satoshis === amount || between(amount, satoshis - P2PKH_INPUT_SIZE, satoshis + P2PKH_INPUT_SIZE)) {
-                    return cache.map(utxo => {
-                        return { satoshis: utxo.satoshis, vout: utxo.vout, txid: utxo.txid, script: script.toHex() }
-                    })
-                }
             } else {
                 return utxos.map(utxo => {
                     return { satoshis: utxo.satoshis, vout: utxo.vout, txid: utxo.txid, script: script.toHex() }
