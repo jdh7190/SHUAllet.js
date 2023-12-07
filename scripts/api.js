@@ -13,10 +13,17 @@ const getRawtx = async txid => {
     const raw = await r.text();
     return raw;
 }
-const broadcast = async txhex => {
+const broadcast = async(txhex, cacheUTXOs = false, address = null) => {
     const r = await (await fetch(`https://api.whatsonchain.com/v1/bsv/main/tx/raw`, {
         method: 'post',
         body: JSON.stringify({ txhex })
     })).json();
+    if (r && cacheUTXOs && address !== null) {
+        const sp = spent(txhex);
+        const utxos = extractUTXOs(txhex, address);
+        console.log('Deleting spent UTXOs....', sp);
+        sp.forEach(utxo => { deleteUTXO(`${utxo.txid}_${utxo.vout}`) })
+        utxos.forEach(utxo => addUTXO(utxo))
+    }
     return r;
 }

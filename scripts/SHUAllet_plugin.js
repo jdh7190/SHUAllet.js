@@ -27,11 +27,18 @@ const getRawtx = async txid => {
     const raw = await r.text();
     return raw;
 }
-const broadcast = async txhex => {
+const broadcast = async(txhex, cacheUTXOs = false, address = null) => {
     const r = await (await fetch(`https://api.whatsonchain.com/v1/bsv/main/tx/raw`, {
         method: 'post',
         body: JSON.stringify({ txhex })
     })).json();
+    if (r && cacheUTXOs && address !== null) {
+        const sp = spent(txhex);
+        const utxos = extractUTXOs(rawtx, address);
+        console.log('Deleting spent UTXOs....', sp);
+        sp.forEach(utxo => { deleteUTXO(`${utxo.txid}_${utxo.vout}`) })
+        utxos.forEach(utxo => addUTXO(utxo))
+    }
     return r;
 }
 const sleep = timeout => { return new Promise(resolve => setTimeout(resolve, timeout)) }
@@ -330,6 +337,14 @@ const getUTXO = (rawtx, idx) => {
         script: bsvtx.outputs[idx].script.toHex()
     }
 }
+const addChangeOutput = (rawtx, address = localStorage.walletAddress) => {
+    const bsvtx = bsv.Transaction(rawtx);
+    const txFee = parseInt(((bsvtx._estimateSize() + P2PKH_INPUT_SIZE) * FEE_FACTOR)) + 1;
+    const inputSatoshis = utxos.reduce(((t, e) => t + e.satoshis), 0);
+    const outputSatoshis = bsvtx.outputs.reduce(((t, e) => t + e._satoshis), 0);
+    bsvtx.to(address, inputSatoshis - outputSatoshis - txFee);
+    return bsvtx.toString();
+}
 const getBSVPublicKey = pk => { return bsv.PublicKey.fromPrivateKey(bsv.PrivateKey.fromWIF(pk)) }
 const getAddressFromPrivateKey = pk => { return bsv.PrivateKey.fromWIF(pk).toAddress().toString() }
 const bPost = (rawtx, post, replyTxid, signPkWIF) => {
@@ -437,6 +452,38 @@ const unlockCoins = async(pkWIF, receiveAddress, txid, oIdx = 0) => {
         return bsvtx.toString();
     } catch(e) { console.log(e) }
 }
+const spent = rawtx => {
+    const tx = bsv.Transaction(rawtx);
+    let utxos = [];
+    tx.inputs.forEach(input => {
+        let vout = input.outputIndex;
+        let txid = input.prevTxId.toString('hex');
+        utxos.push({txid, vout, output: `${txid}_${vout}`});
+    });
+    return utxos;
+}
+const extractUTXOs = (rawtx, addr) => {
+    try {
+        const tx = new bsv.Transaction(rawtx);
+        let utxos = [], vout = 0;
+        tx.outputs.forEach(output => {
+            let satoshis = output.satoshis;
+            let script = new bsv.Script.fromBuffer(output._scriptBuffer);
+            if (script.isSafeDataOut()) { vout++; return }
+            let pkh = bsv.Address.fromPublicKeyHash(script.getPublicKeyHash());
+            let address = pkh.toString();
+            if (address === addr) {
+                utxos.push({satoshis, txid: tx.hash, vout, script: script.toHex()});
+            }
+            vout++;
+        });
+        return utxos;
+    }
+    catch(error) {
+        console.log({error});
+        return [];
+    }
+}
 const normalizeUTXOs = utxos => {
     return utxos.map(utxo => {
         return {
@@ -447,14 +494,22 @@ const normalizeUTXOs = utxos => {
     })
 }
 const getUTXOs = async address => {
-    const r = await fetch(`https://api.whatsonchain.com/v1/bsv/main/address/${address}/unspent`);
-    const res = await r.json();
-    return normalizeUTXOs(res);
+    const utxos = await getCachedUTXOs();
+    if (!utxos.length) {
+        console.log(`Calling WhatsOnChain UTXOs endpoint...`);
+        const r = await fetch(`https://api.whatsonchain.com/v1/bsv/main/address/${address}/unspent`);
+        const res = await r.json();
+        return normalizeUTXOs(res);
+    } else { return utxos }
 }
 const btUTXOs = async address => {
-    const r = await fetch(`https://api.bitails.io/address/${address}/unspent`);
-    const { unspent } = await r.json();
-    return normalizeUTXOs(unspent);
+    const utxos = await getCachedUTXOs();
+    if (!utxos.length) {
+        console.log(`Calling Bitails UTXOs endpoint...`);
+        const r = await fetch(`https://api.bitails.io/address/${address}/unspent`);
+        const { unspent } = await r.json();
+        return normalizeUTXOs(unspent);
+    } else { return utxos }
 }
 const between = (x, min, max) => { return x >= min && x <= max }
 const getPaymentUTXOs = async(address, amount) => {
@@ -490,9 +545,9 @@ const getPaymentUTXOs = async(address, amount) => {
     }
     return [];
 }
-const getWalletBalance = async address => {
-    if (!address) address = localStorage.walletAddress;
+const getWalletBalance = async(address = localStorage.walletAddress) => {
     const utxos = await getUTXOs(address);
+    utxos.forEach(u => addUTXO(u));
     const balance = utxos.reduce(((t, e) => t + e.satoshis), 0)
     return balance; 
 }
@@ -584,8 +639,7 @@ const payForRawTx = async rawtx => {
     const utxos = await getPaymentUTXOs(localStorage.walletAddress, satoshis + txFee);
     if (!utxos.length) { throw `Insufficient funds` }
     bsvtx.from(utxos);
-    const inputSatoshis = utxos.reduce(((t, e) => t + e.satoshis), 0);
-    bsvtx.to(localStorage.walletAddress, inputSatoshis - satoshis - txFee);
+    bsvtx = bsv.Transaction(addChangeOutput(bsvtx.toString()));
     bsvtx.sign(bsv.PrivateKey.fromWIF(localStorage.walletKey));
     return bsvtx.toString();
 }

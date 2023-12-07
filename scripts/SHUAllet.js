@@ -1,3 +1,35 @@
+const spent = rawtx => {
+    const tx = bsv.Transaction(rawtx);
+    let utxos = [];
+    tx.inputs.forEach(input => {
+        let vout = input.outputIndex;
+        let txid = input.prevTxId.toString('hex');
+        utxos.push({txid, vout, output: `${txid}_${vout}`});
+    });
+    return utxos;
+}
+const extractUTXOs = (rawtx, addr) => {
+    try {
+        const tx = new bsv.Transaction(rawtx);
+        let utxos = [], vout = 0;
+        tx.outputs.forEach(output => {
+            let satoshis = output.satoshis;
+            let script = new bsv.Script.fromBuffer(output._scriptBuffer);
+            if (script.isSafeDataOut()) { vout++; return }
+            let pkh = bsv.Address.fromPublicKeyHash(script.getPublicKeyHash());
+            let address = pkh.toString();
+            if (address === addr) {
+                utxos.push({satoshis, txid: tx.hash, vout, script: script.toHex()});
+            }
+            vout++;
+        });
+        return utxos;
+    }
+    catch(error) {
+        console.log({error});
+        return [];
+    }
+}
 const normalizeUTXOs = utxos => {
     return utxos.map(utxo => {
         return {
@@ -8,9 +40,13 @@ const normalizeUTXOs = utxos => {
     })
 }
 const getUTXOs = async address => {
-    const r = await fetch(`https://api.whatsonchain.com/v1/bsv/main/address/${address}/unspent`);
-    const res = await r.json();
-    return normalizeUTXOs(res);
+    const utxos = await getCachedUTXOs();
+    if (!utxos.length) {
+        console.log(`Calling WhatsOnChain UTXOs endpoint...`);
+        const r = await fetch(`https://api.whatsonchain.com/v1/bsv/main/address/${address}/unspent`);
+        const res = await r.json();
+        return normalizeUTXOs(res);
+    } else { return utxos }
 }
 const btUTXOs = async address => {
     const r = await fetch(`https://api.bitails.io/address/${address}/unspent`);
@@ -46,9 +82,9 @@ const getPaymentUTXOs = async(address, amount) => {
     }
     return [];
 }
-const getWalletBalance = async address => {
-    if (!address) address = localStorage.walletAddress;
+const getWalletBalance = async(address = localStorage.walletAddress) => {
     const utxos = await getUTXOs(address);
+    utxos.forEach(u => addUTXO(u));
     const balance = utxos.reduce(((t, e) => t + e.satoshis), 0)
     return balance; 
 }
@@ -114,7 +150,7 @@ const sendBSV = async() => {
             if (rawtx) {
                 const c = confirm(`Send ${satoshis} satoshis to ${addr}?`);
                 if (c) {
-                    const t = await broadcast(rawtx);
+                    const t = await broadcast(rawtx, true, localStorage.walletAddress);
                     alert(t);
                 } else { return }
             } 
@@ -162,6 +198,7 @@ const logout = () => {
 If so, please ensure your wallet is backed up first!`);
         if (!conf) return;
         localStorage.clear();
+        clearUTXOs();
         location.reload();
     }
 }
