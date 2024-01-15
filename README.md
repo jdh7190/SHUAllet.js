@@ -1,6 +1,6 @@
 # SHUAllet.js
 
-![image](https://v3.ordinals.gorillapool.io/content/d14b12a1e54eabc3ae9d15ef8e1f27c28f174fa27e01faacc04a29f98fe636b0_0)
+![image](https://ordinals.gorillapool.io/content/d14b12a1e54eabc3ae9d15ef8e1f27c28f174fa27e01faacc04a29f98fe636b0_0)
 
 ## Introduction
 
