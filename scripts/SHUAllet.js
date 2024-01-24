@@ -129,7 +129,7 @@ const setupWallet = async() => {
 }
 const backupWallet = () => {
     const a = document.createElement('a');
-    const obj = { ordPk: localStorage?.ownerKey, payPk: localStorage.walletKey };
+    const obj = { ordPk: localStorage?.ownerKey, payPk: localStorage.walletKey, identityPk: localStorage.walletKey };
     a.href = URL.createObjectURL( new Blob([JSON.stringify(obj)], { type: 'json' }))
     a.download = 'shuallet.json';
     a.click();
@@ -140,12 +140,19 @@ const sendBSV = async() => {
         if (amt === null) return;
         const satoshis = parseInt(amt);
         if (!satoshis) { throw `Invalid amount` }
+        const balance = await getWalletBalance();
+        if (balance < satoshis) throw `Amount entered exceeds balance`;
+        const sendMax = balance === satoshis;
         const to = prompt(`Enter address to send BSV to:`);
         if (!to) { return }
         const addr = bsv.Address.fromString(to);
         if (addr) {
             const bsvtx = bsv.Transaction();
-            bsvtx.to(addr, satoshis);
+            if (sendMax) {
+                bsvtx.to(addr, satoshis - 1);
+            } else {
+                bsvtx.to(addr, satoshis);
+            }
             const rawtx = await payForRawTx(bsvtx.toString());
             if (rawtx) {
                 const c = confirm(`Send ${satoshis} satoshis to ${addr}?`);
@@ -187,7 +194,9 @@ const payForRawTx = async rawtx => {
     if (!utxos.length) { throw `Insufficient funds` }
     bsvtx.from(utxos);
     const inputSatoshis = utxos.reduce(((t, e) => t + e.satoshis), 0);
-    bsvtx.to(localStorage.walletAddress, inputSatoshis - satoshis - txFee);
+    if (inputSatoshis - satoshis - txFee > 0) {
+        bsvtx.to(localStorage.walletAddress, inputSatoshis - satoshis - txFee);
+    }
     bsvtx.sign(bsv.PrivateKey.fromWIF(localStorage.walletKey));
     return bsvtx.toString();
 }

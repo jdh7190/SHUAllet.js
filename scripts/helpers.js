@@ -9,4 +9,13 @@ const getScriptPushData = data => {
     const abuf = base64ToArrayBuffer(b64);
     return dataToBuf(abuf);
 }
+const base64ToHex = str => {
+    const raw = atob(str);
+    let result = '';
+    for (let i = 0; i < raw.length; i++) {
+      const hex = raw.charCodeAt(i).toString(16);
+      result += (hex.length === 2 ? hex : '0' + hex);
+    }
+    return result;
+}
 const sleep = timeout => { return new Promise(resolve => setTimeout(resolve, timeout)) }

@@ -8,6 +8,14 @@ const getBlock = async() => {
     const res = await r.json();
     return res?.blocks;
 }
+const bufferToHex = buffer => {
+    return [...new Uint8Array (buffer)].map (b => b.toString (16).padStart (2, "0")).join ("");
+}
+const btRawtx = async txid => {
+    const r = await fetch(`https://api.bitails.io/download/tx/${txid}`);
+    const res = await r.arrayBuffer();
+    return [...new Uint8Array (res)].map (b => b.toString (16).padStart (2, "0")).join ("");
+}
 const getRawtx = async txid => {
     const r = await fetch(`https://api.whatsonchain.com/v1/bsv/main/tx/${txid}/hex`);
     const raw = await r.text();

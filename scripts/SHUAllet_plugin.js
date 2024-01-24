@@ -452,6 +452,24 @@ const unlockCoins = async(pkWIF, receiveAddress, txid, oIdx = 0) => {
         return bsvtx.toString();
     } catch(e) { console.log(e) }
 }
+const bulkUnlock = async(pkWIF, receiveAddress, identityAddress, fromHeight, toHeight) => {
+    const r = await fetch(`https://mornin.run/getLocks`, {
+        method: 'post',
+        body: JSON.stringify({
+            fromHeight,
+            toHeight,
+            address: identityAddress
+        })
+    })
+    const res = await r.json();
+    if (res.length) {
+        for (let t of res) {
+            const rawtx = await unlockCoins(pkWIF, receiveAddress, t.txid);
+            const tx = await broadcast(rawtx);
+            console.log(`Unlocked:`, tx);
+        }
+    }
+}
 const spent = rawtx => {
     const tx = bsv.Transaction(rawtx);
     let utxos = [];
@@ -579,7 +597,7 @@ const setupWallet = async() => {
 }
 const backupWallet = () => {
     const a = document.createElement('a');
-    const obj = { ordPk: localStorage?.ownerKey, payPk: localStorage.walletKey };
+    const obj = { ordPk: localStorage?.ownerKey, payPk: localStorage.walletKey, identityPk: localStorage.walletKey };
     a.href = URL.createObjectURL( new Blob([JSON.stringify(obj)], { type: 'json' }))
     a.download = 'shuallet.json';
     a.click();
@@ -590,17 +608,24 @@ const sendBSV = async() => {
         if (amt === null) return;
         const satoshis = parseInt(amt);
         if (!satoshis) { throw `Invalid amount` }
+        const balance = await getWalletBalance();
+        if (balance < satoshis) throw `Amount entered exceeds balance`;
+        const sendMax = balance === satoshis;
         const to = prompt(`Enter address to send BSV to:`);
         if (!to) { return }
         const addr = bsv.Address.fromString(to);
         if (addr) {
             const bsvtx = bsv.Transaction();
-            bsvtx.to(addr, satoshis);
+            if (sendMax) {
+                bsvtx.to(addr, satoshis - 2);
+            } else {
+                bsvtx.to(addr, satoshis);
+            }
             const rawtx = await payForRawTx(bsvtx.toString());
             if (rawtx) {
                 const c = confirm(`Send ${satoshis} satoshis to ${addr}?`);
                 if (c) {
-                    const t = await broadcast(rawtx);
+                    const t = await broadcast(rawtx, true, localStorage.walletAddress);
                     alert(t);
                 } else { return }
             } 
@@ -634,24 +659,40 @@ const payForRawTx = async rawtx => {
     const utxos = await getPaymentUTXOs(localStorage.walletAddress, satoshis + txFee);
     if (!utxos.length) { throw `Insufficient funds` }
     bsvtx.from(utxos);
-    bsvtx = bsv.Transaction(addChangeOutput(bsvtx.toString()));
+    const inputSatoshis = utxos.reduce(((t, e) => t + e.satoshis), 0);
+    if (inputSatoshis - satoshis - txFee > 0) {
+        bsvtx.to(localStorage.walletAddress, inputSatoshis - satoshis - txFee);
+    }
     bsvtx.sign(bsv.PrivateKey.fromWIF(localStorage.walletKey));
     return bsvtx.toString();
 }
 const ORD_LOCK_PREFIX = '2097dfd76851bf465e8f715593b217714858bbe9570ff3bd5e33840a34e20ff0262102ba79df5f8ae7604a9830f03c7933028186aede0675a16f025dc4f8be8eec0382201008ce7480da41702918d1ec8e6849ba32b4d65b1e40dc669c31a1e6306b266c0000';
 const ORD_LOCK_SUFFIX = '615179547a75537a537a537a0079537a75527a527a7575615579008763567901c161517957795779210ac407f0e4bd44bfc207355a778b046225a7068fc59ee7eda43ad905aadbffc800206c266b30e6a1319c66dc401e5bd6b432ba49688eecd118297041da8074ce081059795679615679aa0079610079517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e01007e81517a75615779567956795679567961537956795479577995939521414136d08c5ed2bf3ba048afe6dcaebafeffffffffffffffffffffffffffffff00517951796151795179970079009f63007952799367007968517a75517a75517a7561527a75517a517951795296a0630079527994527a75517a6853798277527982775379012080517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f517f7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e7c7e01205279947f7754537993527993013051797e527e54797e58797e527e53797e52797e57797e0079517a75517a75517a75517a75517a75517a75517a75517a75517a75517a75517a75517a75517a756100795779ac517a75517a75517a75517a75517a75517a75517a75517a75517a7561517a75517a756169587951797e58797eaa577961007982775179517958947f7551790128947f77517a75517a75618777777777777777777767557951876351795779a9876957795779ac777777777777777767006868';
-const buildInscription = (address, data, mediaType, metadata) => {
+const buildInscription = (address, data, mediaType, metadata, isStateful) => {
     const bsvAddress = bsv.Address.fromString(address);
     const p2pkhScript = bsv.Script.buildPublicKeyHashOut(bsvAddress);
-    const script = bsv.Script(p2pkhScript)
-        .add('OP_0')
+    let script;
+    if (isStateful) {
+        script = bsv.Script('OP_0')
         .add('OP_IF')
         .add(getScriptPushData('ord'))
         .add('OP_1')
         .add(getScriptPushData(mediaType))
         .add('OP_0')
         .add(getScriptPushData(data))
-        .add('OP_ENDIF');
+        .add('OP_ENDIF')
+        .add(p2pkhScript);
+    } else {
+        script = bsv.Script(p2pkhScript)
+            .add('OP_0')
+            .add('OP_IF')
+            .add(getScriptPushData('ord'))
+            .add('OP_1')
+            .add(getScriptPushData(mediaType))
+            .add('OP_0')
+            .add(getScriptPushData(data))
+            .add('OP_ENDIF');
+    }
     if (metadata && metadata?.app && metadata?.type) {
         script.add('OP_RETURN').add(getScriptPushData(MAP_PROTOCOL_ADDRESS)).add(getScriptPushData('SET'));
         for (const [key, value] of Object.entries(metadata)) {
@@ -664,7 +705,7 @@ const buildInscription = (address, data, mediaType, metadata) => {
 }
 const signInput = (bsvtx, utxo, pkWIF, idx, cancelListing = false) => {
     const script = bsv.Script(utxo.script);
-    bsvtx.inputs[0].output = new bsv.Transaction.Output({satoshis: utxo.satoshis, script: utxo.script});
+    bsvtx.inputs[idx].output = new bsv.Transaction.Output({satoshis: utxo.satoshis, script: utxo.script});
     const bsvPublicKey = getBSVPublicKey(pkWIF);
     const sig = bsv.Transaction.sighash.sign(bsvtx, bsv.PrivateKey.fromWIF(pkWIF), SIGHASH_ALL_FORKID,
         idx, script, new bsv.crypto.BN(utxo.satoshis));
@@ -695,12 +736,31 @@ const sendInscription = async(txid, idx, ordPkWIF, payPkWIF, toAddress) => {
     const paymentUtxo = await getPaymentUTXOs(paymentAddress, 1);
     const utxos = [ordUtxo, paymentUtxo[0]];
     bsvtx.from(utxos);
-    bsvtx.to(toAddress, 1);
+    if (ordUtxo.script.includes('6170706c69636174696f6e2f6273762d3230')) { // application/bsv-20
+        const bsv20Script = bsv.Script.fromHex(ordUtxo.script);
+        console.log(bsv20Script.chunks[6].buf.toString())
+        const inscriptionScript = buildInscription(toAddress, bsv20Script.chunks[6].buf.toString(), 'application/bsv-20', null);
+        bsvtx.addOutput(bsv.Transaction.Output({ script: inscriptionScript, satoshis: 1 }));
+    } else { bsvtx.to(toAddress, 1) }
     const inputSatoshis = utxos.reduce(((t, e) => t + e.satoshis), 0);
     bsvtx.to(paymentAddress, inputSatoshis - 1 - 1);
     bsvtx = signInput(bsvtx, utxos[0], ordPkWIF, 0);
     bsvtx = signInput(bsvtx, utxos[1], payPkWIF, 1);
     return bsvtx.toString();
+}
+const createListingScript = (ordPkWIF, payoutAddress, satoshisPayout) => {
+    const payOutput = new bsv.Transaction.Output({
+        script: bsv.Script(bsv.Address.fromString(payoutAddress)),
+        satoshis: satoshisPayout
+    })
+    const hexPayOutput = payOutput.toBufferWriter().toBuffer().toString('hex');
+    const ownerOutput = bsv.Transaction.Output({
+        script: bsv.Script(bsv.Address.fromString(getAddressFromPrivateKey(ordPkWIF))),
+        satoshis: 1
+    });
+    const addressHex = ownerOutput.script.chunks[2].buf.toString('hex');
+    const ordLockHex = `${bsv.Script(ORD_LOCK_PREFIX).toASM()} ${addressHex} ${hexPayOutput} ${bsv.Script(ORD_LOCK_SUFFIX).toASM()}`;
+    return ordLockHex;
 }
 const listOrdinal = async(txid, idx, payPkWIF, ordPkWIF, payoutAddress, satoshisPayout) => {
     let bsvtx = bsv.Transaction();
@@ -744,27 +804,56 @@ const cancelListing = async(listingTxid, listingIdx, ordPkWIF, payPkWIF, toAddre
     bsvtx = signInput(bsvtx, utxos[1], payPkWIF, 1);
     return bsvtx.toString();
 }
-const buyListing = async(listingTxid, listingIdx, payPkWIF, toAddress, changeAddress = null, feeAddress = null, marketFeeRate = 0) => {
+const addLRC20TransferOutput = async(id, amt, address, templateRawTx = null) => {
+    const payload = {"p":"lrc-20","op":"transfer","id":id,"amt":parseInt(amt)}
+    const rawtx = await inscribeTx(JSON.stringify(payload), 'application/json', null, address, templateRawTx);
+    return rawtx;
+}
+const buyListing = async(listingTxid, listingIdx, payPkWIF, toAddress, 
+    changeAddress = null, feeAddress = null, marketFeeRate = 0, listingScript, p, id, amt
+) => {
     let bsvtx = bsv.Transaction();
-    const prevRawTx = await getRawtx(listingTxid);
-    const ordUtxo = getUTXO(prevRawTx, listingIdx);
+    if ((p === 'lrc-20' || p === 'LRC-20') && amt > 0) {
+        rawtx = await addLRC20TransferOutput(id, amt, toAddress);
+        bsvtx = bsv.Transaction(rawtx);
+    } else if ((p === 'bsv-20') && amt > 0 && id.length <= 4) {
+        rawtx = await addBSV20TransferOutput(id, amt, toAddress);
+        bsvtx = bsv.Transaction(rawtx);
+    } else if ((p === 'bsv-20') && amt > 0 && id.length > 64) {
+        const tick = ticks.find(t => t.id === id);
+        amt = amt * Math.pow(10, tick.dec);
+        rawtx = await addBSV20V2TransferOutput(id, amt, toAddress);
+        bsvtx = bsv.Transaction(rawtx);
+    } else { bsvtx = bsv.Transaction() }
+    let ordUtxo;
+    if (!listingScript) {
+        const prevRawTx = await getRawtx(listingTxid);
+        ordUtxo = getUTXO(prevRawTx, listingIdx);
+    } else {
+        ordUtxo = { txid: listingTxid, vout: parseInt(listingIdx), script: listingScript, satoshis: 1 }
+    }
     const lockingScriptASM = bsv.Script(ordUtxo.script).toASM();
     const payOutputHex = lockingScriptASM.split(' ')[6];
     const br = bsv.encoding.BufferReader(payOutputHex);
     const payOutput = bsv.Transaction.Output.fromBufferReader(br);
     const paymentAddress = getAddressFromPrivateKey(payPkWIF);
-    const paymentUtxos = await getPaymentUTXOs(paymentAddress, payOutput.satoshis);
+    const marketFee = parseInt(payOutput.satoshis * marketFeeRate);
+    const paymentUtxos = await getPaymentUTXOs(paymentAddress, payOutput.satoshis + marketFee + 2);
     if (!paymentUtxos.length) { throw `Not enough satoshis ${payOutput.satoshis} to pay for listing.` }
     const utxos = [ordUtxo, ...paymentUtxos];
     bsvtx.from(ordUtxo);
-    bsvtx.to(toAddress, 1);
+    if (!p && !amt) { bsvtx.to(toAddress, 1) } // implied transfer
     bsvtx.addOutput(payOutput);
-    const marketFee = parseInt(payOutput.satoshis * marketFeeRate);
     const inputSatoshis = utxos.reduce(((t, e) => t + e.satoshis), 0);
+    const txFee = parseInt(((bsvtx._estimateSize() // current size of tx
+        + (P2PKH_INPUT_SIZE * paymentUtxos.length) // utxos + p2pkh signature
+        + ORDINAL_LOCK_SOLUTION) // Ordinal Lock unlocking script
+        * FEE_FACTOR)) // fee rate
+        + 2; // 1 sat output & Ordinal Lock unlocking script
     if (changeAddress === null) changeAddress = paymentAddress;
-    const changeSatoshis = inputSatoshis - payOutput.satoshis - 2 - marketFee;
+    const changeSatoshis = inputSatoshis - payOutput.satoshis - txFee - marketFee;
     if (changeSatoshis > 2) { // greater than 1 sat mining fee + ordinal output
-        bsvtx.to(changeAddress, inputSatoshis - payOutput.satoshis - 2 - marketFee)
+        bsvtx.to(changeAddress, inputSatoshis - payOutput.satoshis - txFee - marketFee)
     }
     if (feeAddress !== null && marketFeeRate > 0) { bsvtx.to(feeAddress, marketFee) }
     const preimg = bsv.Transaction.sighash.sighashPreimage(
@@ -789,11 +878,81 @@ const buyListing = async(listingTxid, listingIdx, payPkWIF, toAddress, changeAdd
 }
 const indexerSubmit = async txid => {
     try {
-        const rp = await fetch(`https://v3.ordinals.gorillapool.io/api/tx/${txid}/submit`, {method: 'post'});
+        const rp = await fetch(`https://ordinals.gorillapool.io/api/tx/${txid}/submit`, {method: 'post'});
         console.log(`Submitted ${txid} to indexer.`);
         return rp;
     } catch(e) {
         console.log(e);
         return {error:e};
+    }
+}
+const sumSats = arr => { return arr.reduce((a,b) => { return a + b.amt }, 0) }
+const getBSV20Balance = async(address = localStorage.ownerAddress, tick, utxos = []) => {
+    try {
+        if (!utxos.length) {
+            utxos = await (await fetch(`https://ordinals.gorillapool.io/api/txos/address/${address}/unspent?limit=100&offset=0&bsv20=true&origins=false`)).json();
+        }
+        const bsv20s = utxos.map(utxo => utxo.data.bsv20);
+        const ticks = Array.from(new Set(bsv20s.map(bsv20 => bsv20.tick)));
+        let arr = [];
+        for (let tick of ticks) {
+            const ts = bsv20s.filter(bsv20 => bsv20.tick === tick);
+            const balance = sumSats(ts);
+            arr.push({tick,balance})
+        }
+        return tick ? arr.filter(b => b.tick === tick.toUpperCase()) : arr;
+    } catch(e) {
+        console.log(e);
+    }
+}
+const addBSV20TransferOutput = async(tick, amt, address, templateRawTx = null) => {
+    const payload = {"p":"bsv-20","op":"transfer","tick":tick,"amt":amt.toString()}
+    const rawtx = await inscribeTx(JSON.stringify(payload), 'application/bsv-20', null, address, templateRawTx);
+    return rawtx;
+}
+const addBSV20V2TransferOutput = async(id, amt, address, templateRawTx = null) => {
+    const payload = {"p":"bsv-20","op":"transfer","id":id,"amt":amt.toString()}
+    const rawtx = await inscribeTx(JSON.stringify(payload), 'application/bsv-20', null, address, templateRawTx);
+    return rawtx;
+}
+const sendBSV20 = async(tick, amt, toAddress) => {
+    try {
+        const address = localStorage.ownerAddress;
+        const bu = await (await fetch(`https://ordinals.gorillapool.io/api/txos/address/${address}/unspent?limit=100&offset=0&bsv20=true&origins=false`)).json();
+        const utxos = bu.filter(utxo => utxo.data.bsv20.tick === tick.toUpperCase());
+        const curamt = (await getBSV20Balance(localStorage.ownerAddress, tick, utxos))[0].balance;
+        if (amt > curamt) throw `Insufficient balance ${amt} for tick ${tick}`;
+        let utxoamt = 0;
+        let sendutxos = [];
+        for (let utxo of utxos) {
+            utxoamt += utxo.data.bsv20.amt;
+            const raw = await getRawtx(utxo.txid);
+            const ordUtxo = getUTXO(raw, utxo.vout);
+            sendutxos.push(ordUtxo);
+            if (utxoamt >= curamt) break;
+        }
+        let rawtx = await addBSV20TransferOutput(tick, amt, toAddress);
+        if (amt < utxoamt) {
+            rawtx = await addBSV20TransferOutput(tick, parseInt(utxoamt - amt), localStorage.ownerAddress, rawtx);
+        }
+        const paymentUtxos = await getPaymentUTXOs(localStorage.walletAddress, 1);
+        const paymentSatoshis = paymentUtxos.reduce(((t, e) => t + e.satoshis), 0)
+        let bsvtx = bsv.Transaction(rawtx).from([...sendutxos, paymentUtxos]);
+        const inputSatoshis = paymentSatoshis + sendutxos.length;
+        const txFee = parseInt(((bsvtx._estimateSize() + P2PKH_INPUT_SIZE) * FEE_FACTOR)) + 1;
+        bsvtx.to(localStorage.walletAddress, inputSatoshis - 2 - txFee);
+        let i = 0;
+        for (let utxo of sendutxos) {
+            bsvtx = signInput(bsvtx, utxo, localStorage.ownerKey, i);
+            i++;
+        }
+        paymentUtxos.forEach(pUtxo => {
+            bsvtx = signInput(bsvtx, pUtxo, localStorage.walletKey, i);
+            i++;
+        });
+        return bsvtx.toString();
+    } catch(e) {
+        console.log(e);
+        alert(e);
     }
 }

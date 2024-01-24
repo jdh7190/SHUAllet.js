@@ -77,3 +77,21 @@ const unlockCoins = async(pkWIF, receiveAddress, txid, oIdx = 0) => {
         return bsvtx.toString();
     } catch(e) { console.log(e) }
 }
+const bulkUnlock = async(pkWIF, receiveAddress, identityAddress, fromHeight, toHeight) => {
+    const r = await fetch(`https://mornin.run/getLocks`, {
+        method: 'post',
+        body: JSON.stringify({
+            fromHeight,
+            toHeight,
+            address: identityAddress
+        })
+    })
+    const res = await r.json();
+    if (res.length) {
+        for (let t of res) {
+            const rawtx = await unlockCoins(pkWIF, receiveAddress, t.txid);
+            const tx = await broadcast(rawtx);
+            console.log(`Unlocked:`, tx);
+        }
+    }
+}
