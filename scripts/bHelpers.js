@@ -61,14 +61,6 @@ const getUTXO = (rawtx, idx) => {
         script: bsvtx.outputs[idx].script.toHex()
     }
 }
-const addChangeOutput = (rawtx, address = localStorage.walletAddress) => {
-    const bsvtx = bsv.Transaction(rawtx);
-    const txFee = parseInt(((bsvtx._estimateSize() + P2PKH_INPUT_SIZE) * FEE_FACTOR)) + 1;
-    const inputSatoshis = utxos.reduce(((t, e) => t + e.satoshis), 0);
-    const outputSatoshis = bsvtx.outputs.reduce(((t, e) => t + e._satoshis), 0);
-    bsvtx.to(address, inputSatoshis - outputSatoshis - txFee);
-    return bsvtx.toString();
-}
 const getBSVPublicKey = pk => { return bsv.PublicKey.fromPrivateKey(bsv.PrivateKey.fromWIF(pk)) }
 const getAddressFromPrivateKey = pk => { return bsv.PrivateKey.fromWIF(pk).toAddress().toString() }
 const bPost = (rawtx, post, replyTxid, signPkWIF) => {

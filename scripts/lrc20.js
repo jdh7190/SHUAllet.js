@@ -119,7 +119,7 @@ const sendLRC20 = async(id, amt, toAddress, payoutAddress, satoshisPayout) => {
         const paymentSatoshis = paymentUtxos.reduce(((t, e) => t + e.satoshis), 0)
         let bsvtx = bsv.Transaction(rawtx).from([...sendutxos, paymentUtxos]);
         const inputSatoshis = paymentSatoshis + sendutxos.length;
-        const txFee = parseInt(((bsvtx._estimateSize() + P2PKH_INPUT_SIZE) * FEE_FACTOR)) + 1;
+        const txFee = parseInt(((bsvtx._estimateSize() + (P2PKH_INPUT_SIZE * bsvtx.inputs.length)) * FEE_FACTOR)) + 1;
         bsvtx.to(localStorage.walletAddress, inputSatoshis - bsvtx?.outputs?.length - txFee);
         let i = 0;
         for (let utxo of sendutxos) {

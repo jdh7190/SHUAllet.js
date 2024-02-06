@@ -189,7 +189,7 @@ const restoreWallet = (oPK, pPk, newWallet) => {
 const payForRawTx = async rawtx => {
     const bsvtx = bsv.Transaction(rawtx);
     const satoshis = bsvtx.outputs.reduce(((t, e) => t + e._satoshis), 0);
-    const txFee = parseInt(((bsvtx._estimateSize() + P2PKH_INPUT_SIZE) * FEE_FACTOR)) + 1;
+    const txFee = parseInt(((bsvtx._estimateSize() + (P2PKH_INPUT_SIZE * bsvtx.inputs.length)) * FEE_FACTOR)) + 1;
     const utxos = await getPaymentUTXOs(localStorage.walletAddress, satoshis + txFee);
     if (!utxos.length) { throw `Insufficient funds` }
     bsvtx.from(utxos);

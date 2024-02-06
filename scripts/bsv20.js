@@ -6,7 +6,7 @@ const bsv20Mint = async(tick, amt, address) => {
 }
 const getBSV20Balance = async(address = localStorage.ownerAddress, tick, utxos = []) => {
     try {
-        if (!utxos.length) {
+        if (!utxos?.length) {
             utxos = await (await fetch(`https://ordinals.gorillapool.io/api/txos/address/${address}/unspent?limit=100&offset=0&bsv20=true&origins=false`)).json();
         }
         const bsv20s = utxos.map(utxo => utxo.data.bsv20);
@@ -41,7 +41,7 @@ const cancelBSV20 = async outpoint => {
     const paymentSatoshis = paymentUtxos.reduce(((t, e) => t + e.satoshis), 0)
     let bsvtx = bsv.Transaction(rawtx).from([...sendutxos, paymentUtxos]);
     const inputSatoshis = paymentSatoshis + sendutxos.length;
-    const txFee = parseInt(((bsvtx._estimateSize() + P2PKH_INPUT_SIZE) * FEE_FACTOR)) + 1;
+    const txFee = parseInt(((bsvtx._estimateSize() + (P2PKH_INPUT_SIZE * bsvtx.inputs.length)) * FEE_FACTOR)) + 1;
     bsvtx.to(localStorage.walletAddress, inputSatoshis - 2 - txFee);
     let i = 0;
     for (let utxo of sendutxos) {
@@ -87,7 +87,7 @@ const sendBSV20 = async(tick, amt, toAddress, payoutAddress, satoshisPayout) => 
         const paymentSatoshis = paymentUtxos.reduce(((t, e) => t + e.satoshis), 0)
         let bsvtx = bsv.Transaction(rawtx).from([...sendutxos, paymentUtxos]);
         const inputSatoshis = paymentSatoshis + sendutxos.length;
-        const txFee = parseInt(((bsvtx._estimateSize() + P2PKH_INPUT_SIZE) * FEE_FACTOR)) + 1;
+        const txFee = parseInt(((bsvtx._estimateSize() + (P2PKH_INPUT_SIZE * bsvtx.inputs.length)) * FEE_FACTOR)) + 1;
         bsvtx.to(localStorage.walletAddress, inputSatoshis - bsvtx?.outputs?.length - txFee);
         let i = 0;
         for (let utxo of sendutxos) {
