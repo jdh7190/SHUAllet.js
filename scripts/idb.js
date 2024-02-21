@@ -1,7 +1,7 @@
 var idb = indexedDB || mozIndexedDB || webkitIndexedDB || msIndexedDB;
 const initSHUAlletDB = () => {
     return new Promise((resolve, reject) => {
-        const request = indexedDB.open('shuallet');
+        const request = idb.open('shuallet');
         request.onupgradeneeded = e => {
             const db = e.target.result;
             if (!db.objectStoreNames.contains('utxos')) {
@@ -20,7 +20,7 @@ const initSHUAlletDB = () => {
 initSHUAlletDB();
 const addUTXO = utxo => {
     if (idb) {
-        const request = indexedDB.open('shuallet');
+        const request = idb.open('shuallet');
         request.onsuccess = e => {
             console.log('adding utxo...');
             let db = e.target.result;
@@ -34,7 +34,7 @@ const addUTXO = utxo => {
 }
 const cachedUtxos = cb => {
     if (idb) {
-        const request = indexedDB.open('shuallet');
+        const request = idb.open('shuallet');
         request.onsuccess = e => {
             db = e.target.result;
             const tx = db.transaction('utxos', 'readonly');
@@ -53,7 +53,7 @@ const getCachedUTXOs = () => {
 }
 const removeUtxo = (output, cb) => {
     if (idb) {
-        const request = indexedDB.open('shuallet');
+        const request = idb.open('shuallet');
         request.onsuccess = e => {
             db = e.target.result;
             const tx = db.transaction('utxos', 'readwrite');
@@ -72,7 +72,7 @@ const deleteUTXO = output => {
 }
 const clearUTXOs = utxos => {
     if (idb) {
-        const request = indexedDB.open('shuallet');
+        const request = idb.open('shuallet');
         request.onsuccess = e => {
             let db = e.target.result;
             console.log('success');
