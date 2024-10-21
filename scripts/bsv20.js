@@ -4,6 +4,11 @@ const bsv20Mint = async(tick, amt, address) => {
     const rawtx = await inscribeTx(JSON.stringify(payload), 'application/bsv-20', null, address);
     return rawtx;
 }
+const bsv21Deploy = async(sym, amt, dec, icon, address) => {
+    const payload = {"p":"bsv-20","op":"deploy+mint","sym":sym,"amt":amt.toString(),"dec":dec.toString(),"icon":icon};
+    const rawtx = await inscribeTx(JSON.stringify(payload), 'application/bsv-20', null, address);
+    return rawtx;
+}
 const getBSV20Balance = async(address = localStorage.ownerAddress, tick, utxos = []) => {
     try {
         if (!utxos?.length) {
@@ -116,7 +121,10 @@ const buyBSV20 = async outpoint => {
     }
     const sendutxos = [bsv20Utxo];
     const lockingScriptASM = bsv.Script(bsv20Utxo.script).toASM();
-    const payOutputHex = lockingScriptASM.split(' ')[6];
+    let payOutputHex = lockingScriptASM.split(' ')[6];
+    if (payOutputHex.includes('7b2270223a226273762d3230222c')) {
+        payOutputHex = lockingScriptASM.split(' ')[14];
+    }
     const br = bsv.encoding.BufferReader(payOutputHex);
     const payOutput = bsv.Transaction.Output.fromBufferReader(br);
     const paymentUtxos = await getPaymentUTXOs(localStorage.walletAddress, payOutput.satoshis);
@@ -130,14 +138,14 @@ const buyBSV20 = async outpoint => {
     const preimg = bsv.Transaction.sighash.sighashPreimage(
         bsvtx,
         SIGHASH_ALL_ANYONECANPAY_FORKID,
-        listingIdx,
+        0,
         bsv.Script(bsv20Utxo.script),
         new bsv.crypto.BN(bsv20Utxo.satoshis))
     .toString('hex');
     const hexSendOutput = bsvtx.outputs[0].toBufferWriter().toBuffer().toString('hex');
     const hexChangeOutput = bsvtx.outputs.length > 2 ? bsvtx.outputs[2].toBufferWriter().toBuffer().toString('hex') : 'OP_0';
     const unlockingScript = bsv.Script.fromASM(`${hexSendOutput} ${hexChangeOutput} ${preimg} OP_0`);
-    bsvtx.inputs[listingIdx].setScript(unlockingScript);
+    bsvtx.inputs[0].setScript(unlockingScript);
     bsvtx.from(paymentUtxos);
     let curIdx = 1;
     paymentUtxos.forEach(pUtxo => {
