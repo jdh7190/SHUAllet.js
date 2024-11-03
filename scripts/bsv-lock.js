@@ -72,7 +72,7 @@ const unlockCoins = async(pkWIF, receiveAddress, txid, oIdx = 0) => {
         const lockedBlock = hex2Int(lockedBlockHex);
         bsvtx.lockUntilBlockHeight(lockedBlock);
         bsvtx.to(receiveAddress, lockedUTXO.satoshis === 1 ? 1 : lockedUTXO.satoshis - 1); // subtract 1 satoshi to pay the transaction fee
-        const solution = unlockLockScript(bsvtx.toString(), oIdx, lockedUTXO.script, lockedUTXO.satoshis, bsv.PrivateKey.fromWIF(pkWIF))
+        const solution = unlockLockScript(bsvtx.toString(), 0, lockedUTXO.script, lockedUTXO.satoshis, bsv.PrivateKey.fromWIF(pkWIF))
         bsvtx.inputs[0].setScript(solution);
         return bsvtx.toString();
     } catch(e) { console.log(e) }
