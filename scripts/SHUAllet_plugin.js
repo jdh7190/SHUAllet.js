@@ -565,7 +565,9 @@ if (fileUpload) {
         reader.onload = e => {
             try {
                 const json = JSON.parse(e?.target?.result);
-                restoreWallet(json.ordPk, json.payPk)
+                let avatar = json?.avatar || '';
+                let displayName = json?.displayName || '';
+                restoreWallet(json.ordPk, json.payPk, false, avatar, displayName);
             } catch(e) {
                 console.log(e)
                 alert(e);
@@ -590,8 +592,10 @@ const setupWallet = async() => {
 const backupWallet = () => {
     const a = document.createElement('a');
     const obj = { ordPk: localStorage?.ownerKey, payPk: localStorage.walletKey, identityPk: localStorage.walletKey };
+    if (localStorage.displayName) obj.displayName = localStorage.displayName;
+    if (localStorage?.avatar) obj.avatar = localStorage.avatar;
     a.href = URL.createObjectURL( new Blob([JSON.stringify(obj)], { type: 'json' }))
-    a.download = 'shuallet.json';
+    a.download = `${localStorage.walletAddress}_shuallet.json`;
     a.click();
 }
 const sendBSV = async() => {
@@ -632,7 +636,7 @@ const newPK = () => {
     const pkWIF = pk.toWIF();
     return pkWIF;
 }
-const restoreWallet = (oPK, pPk) => {
+const restoreWallet = (oPK, pPk, newWallet, avatar, displayName) => {
     const pk = bsv.PrivateKey.fromWIF(pPk);
     const pkWif = pk.toString();
     const address = bsv.Address.fromPrivateKey(pk)
@@ -642,6 +646,8 @@ const restoreWallet = (oPK, pPk) => {
     localStorage.ownerAddress = ownerAddress.toString();
     localStorage.walletAddress = address.toString();
     localStorage.walletKey = pkWif;
+    if (displayName) localStorage.displayName = displayName;
+    if (avatar) localStorage.avatar = avatar;
     localStorage.ownerPublicKey = ownerPk.toPublicKey().toHex();
 }
 const payForRawTx = async rawtx => {
